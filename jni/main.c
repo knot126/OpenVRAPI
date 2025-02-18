@@ -1,6 +1,7 @@
 #include "Include/VrApi.h"
 
 #include <GLES3/gl3.h>
+#include <EGL/egl.h>
 #include <android/log.h>
 
 #include <time.h>
@@ -8,15 +9,23 @@
 #include <string.h>
 
 typedef struct ovrMobile {
-	int dummy;
+	ovrModeParms params;
+	EGLContext egl_context;
+	EGLDisplay egl_display;
+	EGLSurface egl_surface;
 } ovrMobile;
 
 typedef struct ovrTextureSwapChain {
+	// Render textures
 	GLuint texture_count;
 	GLuint textures[16];
 } ovrTextureSwapChain;
 
 typedef int ovrSystemUIType;
+
+// HACK idfk what im supposed to do
+ovrTextureSwapChain *gSwapChain;
+ovrMobile *gOvr;
 
 ovrInitializeStatus vrapi_Initialize(const ovrInitParms * initParms) {
 	// todo
@@ -27,6 +36,69 @@ ovrInitializeStatus vrapi_Initialize(const ovrInitParms * initParms) {
 void vrapi_Shutdown() {
 	// todo
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Shutdown()");
+}
+
+ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
+	ovrMobile *ovr = malloc(sizeof *ovr);
+	memset(ovr, 0, sizeof *ovr);
+	
+	ovr->params = *parms;
+	ovr->egl_context = (EGLContext) ovr->params.ShareContext;
+	ovr->egl_display = (EGLDisplay) ovr->params.Display;
+	
+	// Get an EGLSurface from a ANativeDisplay
+	if (ovr->params.Flags & VRAPI_MODE_FLAG_NATIVE_WINDOW) {
+		EGLint err;
+		EGLint config_id;
+		EGLConfig config;
+		
+		// Get the id of the context's config
+		eglQueryContext(ovr->egl_display, ovr->egl_context, EGL_CONFIG_ID, &config_id);
+		
+		if ((err = eglGetError()) != EGL_SUCCESS) {
+			__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "eglQueryContext failed: %d", err);
+			abort();
+		}
+		
+		// Get the EGLConfig from the config id
+		EGLint config_attribs[] = {EGL_CONFIG_ID, config_id, EGL_NONE};
+		EGLint config_count = 0;
+		
+		eglChooseConfig(ovr->egl_display, config_attribs, &config, 1, &config_count);
+		
+		if ((err = eglGetError()) != EGL_SUCCESS) {
+			__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "eglChooseConifg failed: %d", err);
+			abort();
+		}
+		
+		// Create EGL surface from native window
+		ovr->egl_surface = eglCreateWindowSurface(ovr->egl_display, config, (void*)ovr->params.WindowSurface, NULL);
+		
+		if ((err = eglGetError()) != EGL_SUCCESS) {
+			__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "eglCreateWindowSurface failed: %d", err);
+			abort();
+		}
+		
+		// Actually bind the context and surface
+		eglMakeCurrent(ovr->egl_display, ovr->egl_surface, ovr->egl_surface, ovr->egl_context);
+		
+		if ((err = eglGetError()) != EGL_SUCCESS) {
+			__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "eglMakeCurrent failed: %d", err);
+			abort();
+		}
+	}
+	
+	gOvr = ovr;
+	
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_EnterVrMode(%p)", parms);
+	return ovr;
+}
+
+void vrapi_LeaveVrMode(ovrMobile* ovr) {
+	// todo
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_LeaveVrMode(%p)", ovr);
+	free(ovr);
+	gOvr = NULL;
 }
 
 bool vrapi_ShowSystemUI(const ovrJava *java, const ovrSystemUIType type) {
@@ -108,29 +180,6 @@ float vrapi_GetSystemPropertyFloat(const ovrJava* java, const ovrSystemProperty 
 	return result;
 }
 
-ovrResult vrapi_SetPerfThread(ovrMobile* ovr, const ovrPerfThreadType type, const uint32_t threadId) {
-	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetPerfThread(%p, %d, %u) -> %d", ovr, type, threadId, ovrSuccess);
-	return ovrSuccess;
-}
-
-ovrResult vrapi_SetClockLevels(ovrMobile* ovr, const int32_t cpuLevel, const int32_t gpuLevel) {
-	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetClockLevels(%p, %d, %d) -> %d", ovr, cpuLevel, gpuLevel, ovrSuccess);
-	return ovrSuccess;
-}
-
-ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_EnterVrMode(%p)", parms);
-	return malloc(sizeof(ovrMobile));
-}
-
-void vrapi_LeaveVrMode(ovrMobile* ovr) {
-	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_LeaveVrMode(%p)", ovr);
-	free(ovr);
-}
-
 double vrapi_GetTimeInSeconds() {
 	struct timespec ts;
 	clock_gettime(CLOCK_REALTIME, &ts);
@@ -142,6 +191,10 @@ double vrapi_GetTimeInSeconds() {
 ovrTextureSwapChain* vrapi_CreateTextureSwapChain(ovrTextureType type, ovrTextureFormat format, int width, int height, int levels, bool buffered) {
 	ovrTextureSwapChain *chain = malloc(sizeof *chain);
 	memset(chain, 0, sizeof *chain);
+	
+	if (!gSwapChain) {
+		gSwapChain = chain;
+	}
 	
 	if (type != VRAPI_TEXTURE_TYPE_2D) {
 		__android_log_print(ANDROID_LOG_WARN, "OpenVRAPI", "Texture arrays not supported!!");
@@ -181,6 +234,20 @@ unsigned int vrapi_GetTextureSwapChainHandle(ovrTextureSwapChain* chain, int ind
 
 ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* frameDescription) {
 	// todo
+	EGLint err;
+	
+	EGLSurface surface = eglGetCurrentSurface( EGL_DRAW );
+	
+	glClearColor(0.0, 1.0, 1.0, 1.0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	
+	eglSwapBuffers(ovr->egl_display, ovr->egl_surface);
+	
+	if ((err = eglGetError()) != EGL_SUCCESS) {
+		__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "eglSwapBuffers failed: %d", err);
+		abort();
+	}
+	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SubmitFrame2(%p, %p) -> %d", ovr, frameDescription, ovrSuccess);
 	return ovrSuccess;
 }
@@ -225,4 +292,16 @@ double vrapi_GetPredictedDisplayTime(ovrMobile* ovr, long long frameIndex) {
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedDisplayTime(%p, %lld) -> %f", ovr, frameIndex, res);
 	
 	return res;
+}
+
+ovrResult vrapi_SetPerfThread(ovrMobile* ovr, const ovrPerfThreadType type, const uint32_t threadId) {
+	// todo
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetPerfThread(%p, %d, %u) -> %d", ovr, type, threadId, ovrSuccess);
+	return ovrSuccess;
+}
+
+ovrResult vrapi_SetClockLevels(ovrMobile* ovr, const int32_t cpuLevel, const int32_t gpuLevel) {
+	// todo
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetClockLevels(%p, %d, %d) -> %d", ovr, cpuLevel, gpuLevel, ovrSuccess);
+	return ovrSuccess;
 }
