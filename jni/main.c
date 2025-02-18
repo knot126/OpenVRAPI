@@ -1,5 +1,6 @@
 #include "Include/VrApi.h"
 
+#include <GLES3/gl3.h>
 #include <android/log.h>
 
 #include <time.h>
@@ -11,7 +12,8 @@ typedef struct ovrMobile {
 } ovrMobile;
 
 typedef struct ovrTextureSwapChain {
-	int dummy;
+	GLuint texture_count;
+	GLuint textures[16];
 } ovrTextureSwapChain;
 
 typedef int ovrSystemUIType;
@@ -84,6 +86,8 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 	}
 	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetSystemPropertyInt(%p, %d) -> %d", java, propType, result);
+	
+	return result;
 }
 
 float vrapi_GetSystemPropertyFloat(const ovrJava* java, const ovrSystemProperty propType) {
@@ -136,27 +140,43 @@ double vrapi_GetTimeInSeconds() {
 }
 
 ovrTextureSwapChain* vrapi_CreateTextureSwapChain(ovrTextureType type, ovrTextureFormat format, int width, int height, int levels, bool buffered) {
-	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_CreateTextureSwapChain(%d, %d, %d, %d, %d, %s) -> [ptr]", type, format, width, height, levels, buffered ? "true" : "false");
-	return malloc(sizeof(ovrTextureSwapChain));
+	ovrTextureSwapChain *chain = malloc(sizeof *chain);
+	memset(chain, 0, sizeof *chain);
+	
+	if (type != VRAPI_TEXTURE_TYPE_2D) {
+		__android_log_print(ANDROID_LOG_WARN, "OpenVRAPI", "Texture arrays not supported!!");
+	}
+	
+	if (format == VRAPI_TEXTURE_FORMAT_8888) {
+		__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "Use VRAPI_TEXTURE_FORMAT_8888");
+	}
+	
+	chain->texture_count = buffered ? 3 : 1;
+	
+	glGenTextures(chain->texture_count, chain->textures);
+	
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_CreateTextureSwapChain(type=%d, format=%d, width=%d, height=%d, levels=%d, buffered=%s) -> %p", type, format, width, height, levels, buffered ? "true" : "false", chain);
+	return chain;
 }
 
 void vrapi_DestroyTextureSwapChain(ovrTextureSwapChain* chain) {
 	// todo
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_DestroyTextureSwapChain(%p)", chain);
+	
+	glDeleteTextures(chain->texture_count, chain->textures);
 	free(chain);
 }
 
 int vrapi_GetTextureSwapChainLength(ovrTextureSwapChain* chain) {
-	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainLength(%p) -> 0", chain);
-	return 0;
+	int count = chain->texture_count;
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainLength(%p) -> %d", chain, count);
+	return count;
 }
 
 unsigned int vrapi_GetTextureSwapChainHandle(ovrTextureSwapChain* chain, int index) {
-	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainHandle(%p, %d) -> 0", chain, index);
-	return 0;
+	int handle = index < chain->texture_count ? chain->textures[index] : 0;
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainHandle(%p, %d) -> %d", chain, index, handle);
+	return handle;
 }
 
 ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* frameDescription) {
@@ -179,6 +199,21 @@ ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds
 	tracking.HeadPose.LinearAcceleration = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.TimeInSeconds = absTimeInSeconds;
 	tracking.HeadPose.PredictionInSeconds = vrapi_GetTimeInSeconds() - absTimeInSeconds;
+	
+	for (size_t k = 0; k < 2; k++) {
+		for (size_t j = 0; j < 4; j++) {
+			for (size_t i = 0; i < 4; i++) {
+				if (i == j) {
+					tracking.Eye[k].ProjectionMatrix.M[i][j] = 1.0f;
+					tracking.Eye[k].ViewMatrix.M[i][j] = 1.0f;
+				}
+				else {
+					tracking.Eye[k].ProjectionMatrix.M[i][j] = 0.0f;
+					tracking.Eye[k].ViewMatrix.M[i][j] = 0.0f;
+				}
+			}
+		}
+	}
 	
 	return tracking;
 }
