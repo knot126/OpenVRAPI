@@ -10,6 +10,7 @@
 #include <math.h>
 
 #define GL_CHECK(S) if ((e = glGetError()) != GL_NO_ERROR) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Error in %s: %s: 0x%x", __FUNCTION__, S, e); abort(); }
+#define GL_QCHK() if ((e = glGetError()) != GL_NO_ERROR) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Error in %s: line %d: 0x%x", __FUNCTION__, __LINE__, e); abort(); }
 #define BLIT_WITH_SHADER 1
 
 typedef struct ovrMobile {
@@ -56,8 +57,8 @@ static GLuint LoadShader(GLenum type, const char *text) {
 	shader = glCreateShader(type);
 	
 	const char *sourceCode[] = {
+		"#version 300 es\nprecision mediump float;\n",
 		(type == GL_VERTEX_SHADER) ? "#define VERTEX\n" : "#define FRAGMENT\n",
-		"precision mediump float;\n",
 		text,
 	};
 	
@@ -78,6 +79,8 @@ static GLuint LoadShader(GLenum type, const char *text) {
 }
 
 static GLuint LoadProgram(const char *text) {
+	GLenum e;
+	
 	GLuint vert = LoadShader(GL_VERTEX_SHADER, text);
 	GLuint frag = LoadShader(GL_FRAGMENT_SHADER, text);
 	
@@ -88,8 +91,8 @@ static GLuint LoadProgram(const char *text) {
 		abort();
 	}
 	
-	glAttachShader(prog, vert);
-	glAttachShader(prog, frag);
+	glAttachShader(prog, vert); GL_QCHK();
+	glAttachShader(prog, frag); GL_QCHK();
 	
 	// glBindAttribLocation(prog, 0, "inPos");
 	// glBindAttribLocation(prog, 1, "inTexCoord");
@@ -121,38 +124,35 @@ struct XVertex gdata[] = {
 static void DrawWithProgram(GLuint prog, GLuint tex) {
 	GLenum e;
 	
-	
-	
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_STENCIL_TEST);
 	glDisable(GL_DEPTH_TEST);
 	
-	glUseProgram(prog);
-	GL_CHECK("1");
+	glUseProgram(prog); GL_QCHK();
 	
 	// Set texture
-	glActiveTexture(GL_TEXTURE0); GL_CHECK("2");
-	glBindTexture(GL_TEXTURE_2D, tex); GL_CHECK("3");
+	glActiveTexture(GL_TEXTURE0); GL_QCHK();
+	glBindTexture(GL_TEXTURE_2D, tex); GL_QCHK();
 	
 	// Set sampler to use texture zero
-	GLint loc = glGetUniformLocation(prog, "uTexture"); GL_CHECK("4");
-	glUniform1i(loc, 0); GL_CHECK("5");
+	GLint loc = glGetUniformLocation(prog, "uTexture"); GL_QCHK();
+	glUniform1i(loc, 0); GL_QCHK();
 	
 	// Setup inPos and inTexCoord
-	GLint inPosLoc = glGetAttribLocation(prog, "inPos"); GL_CHECK("inPos loc");
+	GLint inPosLoc = glGetAttribLocation(prog, "inPos"); GL_QCHK();
 	if (inPosLoc != -1) {
-		glVertexAttribPointer(inPosLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].x); GL_CHECK("6");
-		glEnableVertexAttribArray(inPosLoc); GL_CHECK("7");
+		glVertexAttribPointer(inPosLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].x); GL_QCHK();
+		glEnableVertexAttribArray(inPosLoc); GL_QCHK();
 	}
 	
-	GLint inTexCoordLoc = glGetAttribLocation(prog, "inTexCoord"); GL_CHECK("inTex loc");
+	GLint inTexCoordLoc = glGetAttribLocation(prog, "inTexCoord"); GL_QCHK();
 	if (inTexCoordLoc != -1) {
-		glVertexAttribPointer(inTexCoordLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].u); GL_CHECK("8");
-		glEnableVertexAttribArray(inTexCoordLoc); GL_CHECK("9");
+		glVertexAttribPointer(inTexCoordLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].u); GL_QCHK();
+		glEnableVertexAttribArray(inTexCoordLoc); GL_QCHK();
 	}
 	
 	// Draw
-	glDrawArrays(GL_TRIANGLES, 0, 3); GL_CHECK("10");
+	glDrawArrays(GL_TRIANGLES, 0, 3); GL_QCHK();
 }
 #endif
 
@@ -407,6 +407,8 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 	// todo
 	EGLint err;
 	
+	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SubmitFrame2 Flags=0x%x SwapInterval=%d FrameIndex=%llu DisplayTime=%f", frameDescription->Flags, frameDescription->SwapInterval, frameDescription->FrameIndex, frameDescription->DisplayTime);
+	
 	// EGLSurface surface = eglGetCurrentSurface( EGL_DRAW );
 	eglMakeCurrent(ovr->egl_display, ovr->egl_surface, ovr->egl_surface, ovr->egl_context);
 	// glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -419,7 +421,7 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 		// copy_framebuffer(gSwapChain->textures[0]);
 		// GLuint tex;
 		// glGenTextures(1, &tex);
-		// copy_framebuffer(tex);
+		// default_texture(tex);
 		// glDeleteTextures(1, &tex);
 #ifdef BLIT_WITH_SHADER
 		DrawWithProgram(ovr->blit_program, gSwapChain->textures[0]);
