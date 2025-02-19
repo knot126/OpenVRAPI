@@ -7,12 +7,20 @@
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+
+#define GL_CHECK(S) if ((e = glGetError()) != GL_NO_ERROR) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Error in %s: %s: 0x%x", __FUNCTION__, S, e); abort(); }
+#define BLIT_WITH_SHADER 1
 
 typedef struct ovrMobile {
 	ovrModeParms params;
 	EGLContext egl_context;
 	EGLDisplay egl_display;
 	EGLSurface egl_surface;
+	
+#ifdef BLIT_WITH_SHADER
+	GLuint blit_program;
+#endif
 } ovrMobile;
 
 typedef struct ovrTextureSwapChain {
@@ -37,6 +45,116 @@ void vrapi_Shutdown() {
 	// todo
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Shutdown()");
 }
+
+#ifdef BLIT_WITH_SHADER
+#include "basic_glsl.h"
+
+static GLuint LoadShader(GLenum type, const char *text) {
+	GLuint shader;
+	GLint status;
+	
+	shader = glCreateShader(type);
+	
+	const char *sourceCode[] = {
+		(type == GL_VERTEX_SHADER) ? "#define VERTEX\n" : "#define FRAGMENT\n",
+		"precision mediump float;\n",
+		text,
+	};
+	
+	glShaderSource(shader, 3, sourceCode, NULL);
+	
+	glCompileShader(shader);
+	
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+	
+	if (!status) {
+		char log[2048] = {};
+		glGetShaderInfoLog(shader, 2048, NULL, log);
+		__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "%s shader compile failed: %s", (type==GL_VERTEX_SHADER) ? "Vertex" : "Fragment", log);
+		abort();
+	}
+	
+	return shader;
+}
+
+static GLuint LoadProgram(const char *text) {
+	GLuint vert = LoadShader(GL_VERTEX_SHADER, text);
+	GLuint frag = LoadShader(GL_FRAGMENT_SHADER, text);
+	
+	GLuint prog = glCreateProgram();
+	
+	if (!prog) {
+		__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Program creation failed");
+		abort();
+	}
+	
+	glAttachShader(prog, vert);
+	glAttachShader(prog, frag);
+	
+	// glBindAttribLocation(prog, 0, "inPos");
+	// glBindAttribLocation(prog, 1, "inTexCoord");
+	
+	glLinkProgram(prog);
+	
+	GLint status;
+	glGetProgramiv(prog, GL_LINK_STATUS, &status);
+	
+	if (!status) {
+		__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Program failed to link");
+		abort();
+	}
+	
+	return prog;
+}
+
+struct XVertex {
+	float x, y;
+	float u, v;
+};
+
+struct XVertex gdata[] = {
+	(struct XVertex) {0.0, 0.0, 0.0, 0.0},
+	(struct XVertex) {0.0, 1.0, 0.0, 0.0},
+	(struct XVertex) {1.0, 0.0, 0.0, 0.0},
+};
+
+static void DrawWithProgram(GLuint prog, GLuint tex) {
+	GLenum e;
+	
+	
+	
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_DEPTH_TEST);
+	
+	glUseProgram(prog);
+	GL_CHECK("1");
+	
+	// Set texture
+	glActiveTexture(GL_TEXTURE0); GL_CHECK("2");
+	glBindTexture(GL_TEXTURE_2D, tex); GL_CHECK("3");
+	
+	// Set sampler to use texture zero
+	GLint loc = glGetUniformLocation(prog, "uTexture"); GL_CHECK("4");
+	glUniform1i(loc, 0); GL_CHECK("5");
+	
+	// Setup inPos and inTexCoord
+	GLint inPosLoc = glGetAttribLocation(prog, "inPos"); GL_CHECK("inPos loc");
+	if (inPosLoc != -1) {
+		glVertexAttribPointer(inPosLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].x); GL_CHECK("6");
+		glEnableVertexAttribArray(inPosLoc); GL_CHECK("7");
+	}
+	
+	GLint inTexCoordLoc = glGetAttribLocation(prog, "inTexCoord"); GL_CHECK("inTex loc");
+	if (inTexCoordLoc != -1) {
+		glVertexAttribPointer(inTexCoordLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].u); GL_CHECK("8");
+		glEnableVertexAttribArray(inTexCoordLoc); GL_CHECK("9");
+	}
+	
+	// Draw
+	glDrawArrays(GL_TRIANGLES, 0, 3); GL_CHECK("10");
+}
+#endif
 
 ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 	ovrMobile *ovr = malloc(sizeof *ovr);
@@ -87,6 +205,10 @@ ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 			abort();
 		}
 	}
+	
+#ifdef BLIT_WITH_SHADER
+	ovr->blit_program = LoadProgram(shaderSource);
+#endif
 	
 	gOvr = ovr;
 	
@@ -188,6 +310,16 @@ double vrapi_GetTimeInSeconds() {
 	return result;
 }
 
+void default_texture(GLuint texId) {
+	GLenum e;
+	char content[] = {255, 255, 255, 0, 0, 0, 255, 255, 255, 0, 0, 0};
+	
+	glActiveTexture(GL_TEXTURE0); GL_CHECK("glActiveTexture");
+	glBindTexture(GL_TEXTURE_2D, texId); GL_CHECK("glBindTexture");
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB, GL_UNSIGNED_BYTE, content); GL_CHECK("glTexImage2D");
+}
+
 ovrTextureSwapChain* vrapi_CreateTextureSwapChain(ovrTextureType type, ovrTextureFormat format, int width, int height, int levels, bool buffered) {
 	ovrTextureSwapChain *chain = malloc(sizeof *chain);
 	memset(chain, 0, sizeof *chain);
@@ -207,6 +339,10 @@ ovrTextureSwapChain* vrapi_CreateTextureSwapChain(ovrTextureType type, ovrTextur
 	chain->texture_count = buffered ? 3 : 1;
 	
 	glGenTextures(chain->texture_count, chain->textures);
+	
+	for (size_t i = 0; i < chain->texture_count; i++) {
+		default_texture(chain->textures[i]);
+	}
 	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_CreateTextureSwapChain(type=%d, format=%d, width=%d, height=%d, levels=%d, buffered=%s) -> %p", type, format, width, height, levels, buffered ? "true" : "false", chain);
 	return chain;
@@ -232,14 +368,67 @@ unsigned int vrapi_GetTextureSwapChainHandle(ovrTextureSwapChain* chain, int ind
 	return handle;
 }
 
+// void copy_framebuffer(GLuint texId) {
+// 	GLenum e;
+// 	
+// 	if (glIsTexture(texId) != GL_TRUE) {
+// 		__android_log_print(ANDROID_LOG_WARN, "OpenVRAPI", "texId=%d is not a valid texture, won't blit", texId);
+// 		return;
+// 	}
+// 	
+// 	default_texture(texId);
+// 	
+// 	// FB for texture
+// 	GLuint fboId = 0;
+// 	glGenFramebuffers(1, &fboId); GL_CHECK("glGenFramebuffers");
+// 	glBindFramebuffer(GL_READ_FRAMEBUFFER, fboId); GL_CHECK("glBindFramebuffer(GL_READ_FRAMEBUFFER, fboId)");
+// 	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texId, 0); GL_CHECK("glFramebufferTexture2D");
+// 	
+// 	// Bind default draw buffer and blit
+// 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); GL_CHECK("glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0)");
+// 	
+// 	// Assert that framebuffers are complete
+// 	GLenum readStatus = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER), drawStatus = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+// 	
+// 	if (readStatus != GL_FRAMEBUFFER_COMPLETE || drawStatus != GL_FRAMEBUFFER_COMPLETE) {
+// 		__android_log_print(ANDROID_LOG_WARN, "OpenVRAPI", "Incomplete framebuffer(s): read=0x%x draw=0x%x", readStatus, drawStatus);
+// 		// abort();
+// 	}
+// 	else {
+// 		glBlitFramebuffer(0, 0, 1024, 1024, 0, 0, 1024, 1024, GL_COLOR_BUFFER_BIT, GL_LINEAR); GL_CHECK("glBlitFramebuffer");
+// 	}
+// 	
+// 	// Destroy FB
+// 	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0); GL_CHECK("glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)");
+// 	glDeleteFramebuffers(1, &fboId); GL_CHECK("glDeleteFramebuffers");
+// }
+
 ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* frameDescription) {
 	// todo
 	EGLint err;
 	
-	EGLSurface surface = eglGetCurrentSurface( EGL_DRAW );
+	// EGLSurface surface = eglGetCurrentSurface( EGL_DRAW );
+	eglMakeCurrent(ovr->egl_display, ovr->egl_surface, ovr->egl_surface, ovr->egl_context);
+	// glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	
-	glClearColor(0.0, 1.0, 1.0, 1.0);
+	// glViewport(0,0,1024,1024);
+	glClearColor(0.0, 1.0, frameDescription->FrameIndex/300.0, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
+	
+	if (gSwapChain) {
+		// copy_framebuffer(gSwapChain->textures[0]);
+		// GLuint tex;
+		// glGenTextures(1, &tex);
+		// copy_framebuffer(tex);
+		// glDeleteTextures(1, &tex);
+#ifdef BLIT_WITH_SHADER
+		DrawWithProgram(ovr->blit_program, gSwapChain->textures[0]);
+#endif
+	}
+	else {
+		__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "gSwapChain is null");
+		abort();
+	}
 	
 	eglSwapBuffers(ovr->egl_display, ovr->egl_surface);
 	
