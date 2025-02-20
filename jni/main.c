@@ -11,6 +11,8 @@
 #include <GLES3/gl3.h>
 #include <EGL/egl.h>
 #include <android/log.h>
+#include <android/looper.h>
+#include <android/sensor.h>
 
 #include <time.h>
 #include <stdlib.h>
@@ -23,6 +25,8 @@
 #define FATAL(MSG, ...) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", __VA_ARGS__); abort(); }
 #define LOG(LVL, ...) __android_log_print(LVL, "OpenVRAPI", __VA_ARGS__)
 
+#include "sensorstuff.c"
+
 #define BLIT_WITH_SHADER 1
 
 typedef struct ovrMobile {
@@ -30,11 +34,6 @@ typedef struct ovrMobile {
 	EGLContext egl_context;
 	EGLDisplay egl_display;
 	EGLSurface egl_surface;
-	
-	// ASensorManager *sensor_mgr;
-	// ASensorEventQueue *gryo;
-	// ovrVector3f gyro;
-	// ovrVector3f gyro_raw;
 	
 #ifdef BLIT_WITH_SHADER
 	GLuint blit_program;
@@ -53,8 +52,11 @@ typedef int ovrSystemUIType;
 EGLint gWidth = 2048;
 EGLint gHeight = 1024;
 
+Gyroscope gGyro;
+
 ovrInitializeStatus vrapi_Initialize(const ovrInitParms * initParms) {
 	// todo
+	GyroInit(&gGyro);
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Initialize(%p) -> %d", initParms, VRAPI_INITIALIZE_SUCCESS);
 	return VRAPI_INITIALIZE_SUCCESS;
 }
@@ -224,8 +226,6 @@ void DefaultTexture(GLuint texId, int width, int height) {
 	
 	free(pixels);
 }
-
-
 
 // int GyroCallback(int fd, int events, void *data) {
 // 	return 1;
@@ -560,10 +560,12 @@ ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds
 	// todo
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedTracking2(%p, %f) -> [struct]", ovr, absTimeInSeconds);
 	
+	ovrVector3f ort = GyroGet(&gGyro);
+	
 	ovrTracking2 tracking;
 	tracking.Status = VRAPI_TRACKING_STATUS_ORIENTATION_TRACKED | VRAPI_TRACKING_STATUS_ORIENTATION_VALID;
 	// tracking.HeadPose.Pose.Orientation = (ovrQuatf) {0.0, 0.0, 0.0, 1.0};
-	tracking.HeadPose.Pose.Orientation = EulerToQuat((ovrVector3f){0.0, 0.0, 0.1});
+	tracking.HeadPose.Pose.Orientation = EulerToQuat(ort);
 	tracking.HeadPose.Pose.Position = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.AngularVelocity = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.LinearVelocity = (ovrVector3f) {0.0, 0.0, 0.0};
