@@ -121,16 +121,16 @@ struct XVertex {
 	float u, v;
 };
 
-struct XVertex gdata[] = {
-	(struct XVertex) {-1.0, 1.0, 0.0, 1.0},
-	(struct XVertex) {-1.0, -1.0, 0.0, 0.0},
-	(struct XVertex) {1.0, -1.0, 1.0, 0.0},
-	(struct XVertex) {-1.0, 1.0, 0.0, 1.0},
-	(struct XVertex) {1.0, 1.0, 1.0, 1.0},
-	(struct XVertex) {1.0, -1.0, 1.0, 0.0},
-};
-
 static void DrawWithProgram(GLuint prog, GLuint tex) {
+	struct XVertex gdata[] = {
+		(struct XVertex) {-1.0, 1.0, 0.0, 1.0},
+		(struct XVertex) {-1.0, -1.0, 0.0, 0.0},
+		(struct XVertex) {1.0, -1.0, 1.0, 0.0},
+		(struct XVertex) {-1.0, 1.0, 0.0, 1.0},
+		(struct XVertex) {1.0, 1.0, 1.0, 1.0},
+		(struct XVertex) {1.0, -1.0, 1.0, 0.0},
+	};
+	
 	GLenum e;
 	
 	if (glIsTexture(tex) != GL_TRUE) {
@@ -140,6 +140,8 @@ static void DrawWithProgram(GLuint prog, GLuint tex) {
 	
 	// glViewport(0,0,1024,1024);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); GL_QCHK();
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 	
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_STENCIL_TEST);
@@ -436,7 +438,7 @@ ovrResult vrapi_SubmitFrame2_Layer_Projection2(ovrMobile *ovr, const ovrSubmitFr
 		if ((size_t)chain > 4096) {
 			GLint tex = vrapi_GetTextureSwapChainHandle(chain, layer->Textures[i].SwapChainIndex);
 			
-			DrawWithProgram(ovr->blit_program, ovr->placeholder /*tex*/);
+			DrawWithProgram(ovr->blit_program, tex);
 		}
 		else {
 			LOG(ANDROID_LOG_WARN, "ColorSwapChain = %p !! WTF!?", chain);
@@ -458,6 +460,11 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 		__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "eglMakeCurrent failed: %d", err);
 		abort();
 	}
+	
+	int w = vrapi_GetSystemPropertyInt(NULL, VRAPI_SYS_PROP_DISPLAY_PIXELS_WIDE);
+	int h = vrapi_GetSystemPropertyInt(NULL, VRAPI_SYS_PROP_DISPLAY_PIXELS_HIGH);
+	
+	glViewport(0, 0, w, h);
 	
 	glClearColor(0.5, 0.5, 0.5, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
