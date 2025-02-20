@@ -121,14 +121,14 @@ struct XVertex {
 	float u, v;
 };
 
-static void DrawWithProgram(GLuint prog, GLuint tex) {
+static void DrawEyeFromTextureAndLRBT(GLuint prog, GLuint tex, float l, float r, float b, float t) {
 	struct XVertex gdata[] = {
-		(struct XVertex) {-1.0, 1.0, 0.0, 1.0},
-		(struct XVertex) {-1.0, -1.0, 0.0, 0.0},
-		(struct XVertex) {1.0, -1.0, 1.0, 0.0},
-		(struct XVertex) {-1.0, 1.0, 0.0, 1.0},
-		(struct XVertex) {1.0, 1.0, 1.0, 1.0},
-		(struct XVertex) {1.0, -1.0, 1.0, 0.0},
+		(struct XVertex) {l, t, 0.0, 1.0},
+		(struct XVertex) {l, b, 0.0, 0.0},
+		(struct XVertex) {r, b, 1.0, 0.0},
+		(struct XVertex) {l, t, 0.0, 1.0},
+		(struct XVertex) {r, t, 1.0, 1.0},
+		(struct XVertex) {r, b, 1.0, 0.0},
 	};
 	
 	GLenum e;
@@ -158,18 +158,12 @@ static void DrawWithProgram(GLuint prog, GLuint tex) {
 	if (TextureLoc >= 0) {
 		glUniform1i(TextureLoc, 0); GL_QCHK();
 	}
-	else {
-		// LOG(ANDROID_LOG_WARN, "uTexture could not be set");
-	}
 	
 	// Setup inPos and inTexCoord
 	GLint inPosLoc = glGetAttribLocation(prog, "inPos"); GL_QCHK();
 	if (inPosLoc != -1) {
 		glVertexAttribPointer(inPosLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].x); GL_QCHK();
 		glEnableVertexAttribArray(inPosLoc); GL_QCHK();
-	}
-	else {
-		// LOG(ANDROID_LOG_WARN, "inPos could not be bound");
 	}
 	
 	GLint inTexCoordLoc = glGetAttribLocation(prog, "inTexCoord"); GL_QCHK();
@@ -430,7 +424,7 @@ unsigned int vrapi_GetTextureSwapChainHandle(ovrTextureSwapChain* chain, int ind
 ovrResult vrapi_SubmitFrame2_Layer_Projection2(ovrMobile *ovr, const ovrSubmitFrameDescription2 *frameDescription, const ovrLayerProjection2 *layer) {
 	// LOG(ANDROID_LOG_INFO, "layer=0x%x", layer);
 	
-	for (size_t i = 0; i < 1; i++) {
+	for (size_t i = 0; i < VRAPI_FRAME_LAYER_EYE_MAX; i++) {
 		ovrTextureSwapChain *chain = layer->Textures[i].ColorSwapChain;
 		
 		// LOG(ANDROID_LOG_INFO, "chain=0x%x", chain);
@@ -438,7 +432,7 @@ ovrResult vrapi_SubmitFrame2_Layer_Projection2(ovrMobile *ovr, const ovrSubmitFr
 		if ((size_t)chain > 4096) {
 			GLint tex = vrapi_GetTextureSwapChainHandle(chain, layer->Textures[i].SwapChainIndex);
 			
-			DrawWithProgram(ovr->blit_program, tex);
+			DrawEyeFromTextureAndLRBT(ovr->blit_program, tex, -1.0 + i, (float)i, -1.0, 1.0);
 		}
 		else {
 			LOG(ANDROID_LOG_WARN, "ColorSwapChain = %p !! WTF!?", chain);
@@ -500,10 +494,6 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 		}
 	}
 #undef NOIMP
-	
-#ifdef BLIT_WITH_SHADER
-	// DrawWithProgram(ovr->blit_program, gSwapChain->textures[0]);
-#endif
 	
 	glFinish();
 	eglSwapBuffers(ovr->egl_display, ovr->egl_surface);
