@@ -1,3 +1,10 @@
+/**
+ * TODOs/things that need improvement (incomplete list ofc):
+ * - Blit to screen instead of drawing using shaders
+ * - Hardcode less stuff
+ * - Frame limiting (if needed)
+ */
+
 #include "Include/VrApi.h"
 #include "Include/VrApi_Helpers.h"
 
@@ -24,6 +31,11 @@ typedef struct ovrMobile {
 	EGLDisplay egl_display;
 	EGLSurface egl_surface;
 	
+	// ASensorManager *sensor_mgr;
+	// ASensorEventQueue *gryo;
+	// ovrVector3f gyro;
+	// ovrVector3f gyro_raw;
+	
 #ifdef BLIT_WITH_SHADER
 	GLuint blit_program;
 #endif
@@ -38,9 +50,8 @@ typedef struct ovrTextureSwapChain {
 
 typedef int ovrSystemUIType;
 
-// HACK idfk what im supposed to do
-ovrTextureSwapChain *gSwapChain;
-ovrMobile *gOvr;
+EGLint gWidth = 2048;
+EGLint gHeight = 1024;
 
 ovrInitializeStatus vrapi_Initialize(const ovrInitParms * initParms) {
 	// todo
@@ -196,12 +207,12 @@ void DefaultTexture(GLuint texId, int width, int height) {
 	GLenum e;
 	char *pixels = malloc(4 * width * height);
 	
-	for (size_t i = 0; i < width * height; i++) {
-		pixels[4 * i + 0] = 127;
-		pixels[4 * i + 1] = 63;
-		pixels[4 * i + 2] = 255;
-		pixels[4 * i + 3] = 255;
-	}
+	// for (size_t i = 0; i < width * height; i++) {
+	// 	pixels[4 * i + 0] = 127;
+	// 	pixels[4 * i + 1] = 63;
+	// 	pixels[4 * i + 2] = 255;
+	// 	pixels[4 * i + 3] = 255;
+	// }
 	
 	glActiveTexture(GL_TEXTURE0); GL_CHECK("glActiveTexture");
 	glBindTexture(GL_TEXTURE_2D, texId); GL_CHECK("glBindTexture");
@@ -213,6 +224,12 @@ void DefaultTexture(GLuint texId, int width, int height) {
 	
 	free(pixels);
 }
+
+
+
+// int GyroCallback(int fd, int events, void *data) {
+// 	return 1;
+// }
 
 ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 	ovrMobile *ovr = malloc(sizeof *ovr);
@@ -264,6 +281,10 @@ ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 		}
 	}
 	
+	// Get the width and height (sorry these are global :/)
+	eglQuerySurface(ovr->egl_display, ovr->egl_surface, EGL_WIDTH, &gWidth);
+	eglQuerySurface(ovr->egl_display, ovr->egl_surface, EGL_HEIGHT, &gHeight);
+	
 #ifdef BLIT_WITH_SHADER
 	ovr->blit_program = LoadProgram(shaderSource);
 #endif
@@ -271,11 +292,33 @@ ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 	glGenTextures(1, &ovr->placeholder);
 	DefaultTexture(ovr->placeholder, 2, 2);
 	
-	gOvr = ovr;
+	// Sensor stuff
+	// ovr->sensor_mgr = ASensorManager_getInstance();
+	// ALooper *looper = ALooper_forThread();
+	// ovr->gyro_event_queue = ASensorManager_createEventQueue(ovr->sensor_mgr, looper, ALOOPER_POLL_CALLBACK, GyroCallback, NULL);
+	// ASensor *gyroscope = ASensorManager_getDefaultSensor(ovr->sensor_mgr, ASENSOR_TYPE_GYROSCOPE);
+	// ASensorEventQueue_enableSensor(ovr->gyro_event_queue, gyroscope);
 	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_EnterVrMode(%p)", parms);
 	return ovr;
 }
+
+// void ProcessGryoscopeEvents(ovrMobile *ovr) {
+// 	ssize_t events = 1;
+// 	
+// 	while (events >= 0) {
+// 		ASensorEvent evt;
+// 		events = ASensorEventQueue_getEvents(ovr->gyro_event_queue, &evt, 1);
+// 		
+// 		if (events < 0) {
+// 			return;
+// 		}
+// 		
+// 		ovr->gyro_raw.x = evt.values[0];
+// 		ovr->gyro_raw.y = evt.values[1];
+// 		ovr->gyro_raw.z = evt.values[2];
+// 	}
+// }
 
 void vrapi_LeaveVrMode(ovrMobile* ovr) {
 	// todo
@@ -283,7 +326,6 @@ void vrapi_LeaveVrMode(ovrMobile* ovr) {
 	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_LeaveVrMode(%p)", ovr);
 	free(ovr);
-	gOvr = NULL;
 }
 
 bool vrapi_ShowSystemUI(const ovrJava *java, const ovrSystemUIType type) {
@@ -311,11 +353,11 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 			break;
 			
 		case VRAPI_SYS_PROP_DISPLAY_PIXELS_WIDE:
-			result = 2880; // todo, pixel 2 xl for now
+			result = gWidth;
 			break;
 			
 		case VRAPI_SYS_PROP_DISPLAY_PIXELS_HIGH:
-			result = 1440;
+			result = gHeight;
 			break;
 			
 		case VRAPI_SYS_PROP_DISPLAY_REFRESH_RATE:
@@ -376,10 +418,6 @@ double vrapi_GetTimeInSeconds() {
 ovrTextureSwapChain* vrapi_CreateTextureSwapChain(ovrTextureType type, ovrTextureFormat format, int width, int height, int levels, bool buffered) {
 	ovrTextureSwapChain *chain = malloc(sizeof *chain);
 	memset(chain, 0, sizeof *chain);
-	
-	if (!gSwapChain) {
-		gSwapChain = chain;
-	}
 	
 	if (type != VRAPI_TEXTURE_TYPE_2D) {
 		__android_log_print(ANDROID_LOG_WARN, "OpenVRAPI", "Texture arrays not supported!!");
@@ -507,13 +545,25 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 	return ovrSuccess;
 }
 
+ovrQuatf EulerToQuat(ovrVector3f rot) {
+	ovrQuatf quat;
+	
+	quat.x = sinf(rot.x/2) * cosf(rot.y/2) * cosf(rot.z/2) - cosf(rot.x/2) * sinf(rot.y/2) * sinf(rot.z/2);
+	quat.y = cosf(rot.x/2) * sinf(rot.y/2) * cosf(rot.z/2) + sinf(rot.x/2) * cosf(rot.y/2) * sinf(rot.z/2);
+	quat.z = cosf(rot.x/2) * cosf(rot.y/2) * sinf(rot.z/2) - sinf(rot.x/2) * sinf(rot.y/2) * cosf(rot.z/2);
+	quat.w = cosf(rot.x/2) * cosf(rot.y/2) * cosf(rot.z/2) + sinf(rot.x/2) * sinf(rot.y/2) * sinf(rot.z/2);
+	
+	return quat;
+}
+
 ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds) {
 	// todo
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedTracking2(%p, %f) -> [struct]", ovr, absTimeInSeconds);
 	
 	ovrTracking2 tracking;
 	tracking.Status = VRAPI_TRACKING_STATUS_ORIENTATION_TRACKED | VRAPI_TRACKING_STATUS_ORIENTATION_VALID;
-	tracking.HeadPose.Pose.Orientation = (ovrQuatf) {0.0, 0.0, 0.0, 1.0};
+	// tracking.HeadPose.Pose.Orientation = (ovrQuatf) {0.0, 0.0, 0.0, 1.0};
+	tracking.HeadPose.Pose.Orientation = EulerToQuat((ovrVector3f){0.0, 0.0, 0.1});
 	tracking.HeadPose.Pose.Position = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.AngularVelocity = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.LinearVelocity = (ovrVector3f) {0.0, 0.0, 0.0};
@@ -537,8 +587,8 @@ ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds
 		}
 	}
 	
-	tracking.Eye[0].ProjectionMatrix = ovrMatrix4f_CreateProjectionFov(60.0, 60.0, 0.0, 0.0, 0.01, 100.0);
-	tracking.Eye[1].ProjectionMatrix = ovrMatrix4f_CreateProjectionFov(60.0, 60.0, 0.0, 0.0, 0.01, 100.0);
+	tracking.Eye[0].ProjectionMatrix = ovrMatrix4f_CreateProjectionFov(40.0, 60.0, 0.0, 0.0, 0.01, 100.0);
+	tracking.Eye[1].ProjectionMatrix = ovrMatrix4f_CreateProjectionFov(40.0, 60.0, 0.0, 0.0, 0.01, 100.0);
 	
 	return tracking;
 }
