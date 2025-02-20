@@ -1,4 +1,5 @@
 #include "Include/VrApi.h"
+#include "Include/VrApi_Helpers.h"
 
 #include <GLES3/gl3.h>
 #include <EGL/egl.h>
@@ -13,7 +14,7 @@
 #define GL_QCHK() if ((e = glGetError()) != GL_NO_ERROR) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Error in %s: line %d: 0x%x", __FUNCTION__, __LINE__, e); abort(); }
 
 #define FATAL(MSG, ...) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", __VA_ARGS__); abort(); }
-#define LOG(LVL, MSG, ...) __android_log_print(LVL, "OpenVRAPI", MSG, __VA_ARGS__)
+#define LOG(LVL, ...) __android_log_print(LVL, "OpenVRAPI", __VA_ARGS__)
 
 #define BLIT_WITH_SHADER 1
 
@@ -26,7 +27,7 @@ typedef struct ovrMobile {
 #ifdef BLIT_WITH_SHADER
 	GLuint blit_program;
 #endif
-	GLint placeholder;
+	GLuint placeholder;
 } ovrMobile;
 
 typedef struct ovrTextureSwapChain {
@@ -137,6 +138,9 @@ static void DrawWithProgram(GLuint prog, GLuint tex) {
 		return;
 	}
 	
+	// glViewport(0,0,1024,1024);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); GL_QCHK();
+	
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_STENCIL_TEST);
 	glDisable(GL_DEPTH_TEST);
@@ -149,7 +153,12 @@ static void DrawWithProgram(GLuint prog, GLuint tex) {
 	
 	// Set sampler to use texture zero
 	GLint TextureLoc = glGetUniformLocation(prog, "uTexture"); GL_QCHK();
-	glUniform1i(TextureLoc, 0); GL_QCHK();
+	if (TextureLoc >= 0) {
+		glUniform1i(TextureLoc, 0); GL_QCHK();
+	}
+	else {
+		// LOG(ANDROID_LOG_WARN, "uTexture could not be set");
+	}
 	
 	// Setup inPos and inTexCoord
 	GLint inPosLoc = glGetAttribLocation(prog, "inPos"); GL_QCHK();
@@ -157,11 +166,29 @@ static void DrawWithProgram(GLuint prog, GLuint tex) {
 		glVertexAttribPointer(inPosLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].x); GL_QCHK();
 		glEnableVertexAttribArray(inPosLoc); GL_QCHK();
 	}
+	else {
+		// LOG(ANDROID_LOG_WARN, "inPos could not be bound");
+	}
 	
 	GLint inTexCoordLoc = glGetAttribLocation(prog, "inTexCoord"); GL_QCHK();
 	if (inTexCoordLoc != -1) {
 		glVertexAttribPointer(inTexCoordLoc, 2, GL_FLOAT, GL_FALSE, sizeof(struct XVertex), &gdata[0].u); GL_QCHK();
 		glEnableVertexAttribArray(inTexCoordLoc); GL_QCHK();
+	}
+	else {
+		LOG(ANDROID_LOG_WARN, "inTexCoordLoc could not be bound");
+	}
+	
+	glValidateProgram(prog);
+	
+	GLint validate_status;
+	glGetProgramiv(prog, GL_VALIDATE_STATUS, &validate_status);
+	
+	if (!validate_status) {
+		char buf[2048] = {};
+		glGetProgramInfoLog(prog, 2048, NULL, buf);
+		LOG(ANDROID_LOG_FATAL, "Program validation failed! %s", buf);
+		abort();
 	}
 	
 	// Draw
@@ -169,16 +196,26 @@ static void DrawWithProgram(GLuint prog, GLuint tex) {
 }
 #endif
 
-char gDefaultTextureContent[] = {255, 255, 255, 0xff, 0, 0, 0, 0xff, 255, 255, 255, 0xff, 0, 0, 0, 0xff};
-
-void DefaultTexture(GLuint texId) {
+void DefaultTexture(GLuint texId, int width, int height) {
 	GLenum e;
+	char *pixels = malloc(4 * width * height);
+	
+	for (size_t i = 0; i < width * height; i++) {
+		pixels[4 * i + 0] = 127;
+		pixels[4 * i + 1] = 63;
+		pixels[4 * i + 2] = 255;
+		pixels[4 * i + 3] = 255;
+	}
 	
 	glActiveTexture(GL_TEXTURE0); GL_CHECK("glActiveTexture");
 	glBindTexture(GL_TEXTURE_2D, texId); GL_CHECK("glBindTexture");
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, gDefaultTextureContent); GL_CHECK("glTexImage2D");
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels); GL_CHECK("glTexImage2D");
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	
+	free(pixels);
 }
 
 ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
@@ -236,7 +273,7 @@ ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 #endif
 	
 	glGenTextures(1, &ovr->placeholder);
-	DefaultTexture(ovr->placeholder);
+	DefaultTexture(ovr->placeholder, 2, 2);
 	
 	gOvr = ovr;
 	
@@ -361,7 +398,7 @@ ovrTextureSwapChain* vrapi_CreateTextureSwapChain(ovrTextureType type, ovrTextur
 	glGenTextures(chain->texture_count, chain->textures);
 	
 	for (size_t i = 0; i < chain->texture_count; i++) {
-		DefaultTexture(chain->textures[i]);
+		DefaultTexture(chain->textures[i], width, height);
 	}
 	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_CreateTextureSwapChain(type=%d, format=%d, width=%d, height=%d, levels=%d, buffered=%s) -> %p", type, format, width, height, levels, buffered ? "true" : "false", chain);
@@ -399,8 +436,6 @@ ovrResult vrapi_SubmitFrame2_Layer_Projection2(ovrMobile *ovr, const ovrSubmitFr
 		if ((size_t)chain > 4096) {
 			GLint tex = vrapi_GetTextureSwapChainHandle(chain, layer->Textures[i].SwapChainIndex);
 			
-			LOG(ANDROID_LOG_WARN, "WE BLITTING!! %p !!", chain);
-			
 			DrawWithProgram(ovr->blit_program, ovr->placeholder /*tex*/);
 		}
 		else {
@@ -418,6 +453,12 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SubmitFrame2 Flags=0x%x SwapInterval=%d FrameIndex=%llu DisplayTime=%f", frameDescription->Flags, frameDescription->SwapInterval, frameDescription->FrameIndex, frameDescription->DisplayTime);
 	
 	eglMakeCurrent(ovr->egl_display, ovr->egl_surface, ovr->egl_surface, ovr->egl_context);
+	
+	if ((err = eglGetError()) != EGL_SUCCESS) {
+		__android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "eglMakeCurrent failed: %d", err);
+		abort();
+	}
+	
 	glClearColor(0.5, 0.5, 0.5, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 	
@@ -457,6 +498,7 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 	// DrawWithProgram(ovr->blit_program, gSwapChain->textures[0]);
 #endif
 	
+	glFinish();
 	eglSwapBuffers(ovr->egl_display, ovr->egl_surface);
 	
 	if ((err = eglGetError()) != EGL_SUCCESS) {
@@ -497,6 +539,9 @@ ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds
 			}
 		}
 	}
+	
+	tracking.Eye[0].ProjectionMatrix = ovrMatrix4f_CreateProjectionFov(60.0, 60.0, 0.0, 0.0, 0.01, 100.0);
+	tracking.Eye[1].ProjectionMatrix = ovrMatrix4f_CreateProjectionFov(60.0, 60.0, 0.0, 0.0, 0.01, 100.0);
 	
 	return tracking;
 }
