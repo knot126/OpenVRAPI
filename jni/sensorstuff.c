@@ -30,8 +30,8 @@ int GyroCallback(int fd, int events, void *this_) {
 		
 		// Shitty integration :3
 		this->orientation.x += delta * event.data[0];
-		this->orientation.y += delta * event.data[1];
-		this->orientation.z += delta * event.data[2];
+		this->orientation.y += delta * event.data[2];
+		this->orientation.z += delta * event.data[1];
 		
 		// Set this as the timestamp for the last event
 		this->lastEventTime = event.timestamp;
