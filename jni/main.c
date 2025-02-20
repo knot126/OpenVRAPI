@@ -28,6 +28,7 @@
 #include "sensorstuff.c"
 
 #define BLIT_WITH_SHADER 1
+#define SINGLE_EYE 1
 
 typedef struct ovrMobile {
 	ovrModeParms params;
@@ -343,6 +344,7 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 			result = 60;
 			break;
 			
+#ifndef SINGLE_EYE
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH:
 			result = 1024; // todo tho the docs say they always return this
 			break;
@@ -350,6 +352,15 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT:
 			result = 1024;
 			break;
+#else
+		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH:
+			result = gWidth/2; // todo tho the docs say they always return this
+			break;
+			
+		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT:
+			result = gHeight/2;
+			break;
+#endif
 		
 		case 128: // VRAPI_SYS_PROP_MULTIVIEW_AVAILABLE
 			result = VRAPI_FALSE; // todo
@@ -441,10 +452,9 @@ unsigned int vrapi_GetTextureSwapChainHandle(ovrTextureSwapChain* chain, int ind
 ovrResult vrapi_SubmitFrame2_Layer_Projection2(ovrMobile *ovr, const ovrSubmitFrameDescription2 *frameDescription, const ovrLayerProjection2 *layer) {
 	// LOG(ANDROID_LOG_INFO, "layer=0x%x", layer);
 	
+#ifndef SINGLE_EYE
 	for (size_t i = 0; i < VRAPI_FRAME_LAYER_EYE_MAX; i++) {
 		ovrTextureSwapChain *chain = layer->Textures[i].ColorSwapChain;
-		
-		// LOG(ANDROID_LOG_INFO, "chain=0x%x", chain);
 		
 		if ((size_t)chain > 4096) {
 			GLint tex = vrapi_GetTextureSwapChainHandle(chain, layer->Textures[i].SwapChainIndex);
@@ -455,6 +465,18 @@ ovrResult vrapi_SubmitFrame2_Layer_Projection2(ovrMobile *ovr, const ovrSubmitFr
 			LOG(ANDROID_LOG_WARN, "ColorSwapChain = %p !! WTF!?", chain);
 		}
 	}
+#else
+	ovrTextureSwapChain *chain = layer->Textures[SINGLE_EYE].ColorSwapChain;
+	
+	if ((size_t)chain > 4096) {
+		GLint tex = vrapi_GetTextureSwapChainHandle(chain, layer->Textures[SINGLE_EYE].SwapChainIndex);
+		
+		DrawEyeFromTextureAndLRBT(ovr->blit_program, tex, -1.0, 1.0, -1.0, 1.0);
+	}
+	else {
+		LOG(ANDROID_LOG_WARN, "ColorSwapChain = %p !! WTF!?", chain);
+	}
+#endif
 	
 	return ovrSuccess;
 }
@@ -543,8 +565,11 @@ ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds
 	
 	ovrTracking2 tracking;
 	tracking.Status = VRAPI_TRACKING_STATUS_ORIENTATION_TRACKED | VRAPI_TRACKING_STATUS_ORIENTATION_VALID;
-	// tracking.HeadPose.Pose.Orientation = (ovrQuatf) {0.0, 0.0, 0.0, 1.0};
+#ifdef USE_GRV
+	tracking.HeadPose.Pose.Orientation = (ovrQuatf) {ort.x, ort.y, ort.z, 1.0};
+#else
 	tracking.HeadPose.Pose.Orientation = EulerToQuat(ort);
+#endif
 	tracking.HeadPose.Pose.Position = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.AngularVelocity = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.LinearVelocity = (ovrVector3f) {0.0, 0.0, 0.0};

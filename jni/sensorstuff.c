@@ -1,4 +1,5 @@
-#define USE_GRV 1
+// #define USE_GRV 1
+#define POLLING_RATE_MICROSECONDS 10000
 
 typedef struct {
 	ASensorEventQueue *queue;
@@ -82,7 +83,7 @@ void GyroInit(Gyroscope *this) {
 		abort();
 	}
 	
-	ASensorEventQueue_setEventRate(this->queue, sensor, 16666);
+	ASensorEventQueue_setEventRate(this->queue, sensor, POLLING_RATE_MICROSECONDS);
 }
 
 ovrVector3f GyroGet(Gyroscope *this) {
