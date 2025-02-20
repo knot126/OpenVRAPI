@@ -22,7 +22,7 @@
 #define GL_CHECK(S) if ((e = glGetError()) != GL_NO_ERROR) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Error in %s: %s: 0x%x", __FUNCTION__, S, e); abort(); }
 #define GL_QCHK() if ((e = glGetError()) != GL_NO_ERROR) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", "Error in %s: line %d: 0x%x", __FUNCTION__, __LINE__, e); abort(); }
 
-#define FATAL(MSG, ...) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", __VA_ARGS__); abort(); }
+#define FATAL(MSG, ...) { __android_log_print(ANDROID_LOG_FATAL, "OpenVRAPI", MSG, __VA_ARGS__); abort(); }
 #define LOG(LVL, ...) __android_log_print(LVL, "OpenVRAPI", __VA_ARGS__)
 
 #include "sensorstuff.c"
@@ -209,13 +209,6 @@ void DefaultTexture(GLuint texId, int width, int height) {
 	GLenum e;
 	char *pixels = malloc(4 * width * height);
 	
-	// for (size_t i = 0; i < width * height; i++) {
-	// 	pixels[4 * i + 0] = 127;
-	// 	pixels[4 * i + 1] = 63;
-	// 	pixels[4 * i + 2] = 255;
-	// 	pixels[4 * i + 3] = 255;
-	// }
-	
 	glActiveTexture(GL_TEXTURE0); GL_CHECK("glActiveTexture");
 	glBindTexture(GL_TEXTURE_2D, texId); GL_CHECK("glBindTexture");
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels); GL_CHECK("glTexImage2D");
@@ -226,10 +219,6 @@ void DefaultTexture(GLuint texId, int width, int height) {
 	
 	free(pixels);
 }
-
-// int GyroCallback(int fd, int events, void *data) {
-// 	return 1;
-// }
 
 ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 	ovrMobile *ovr = malloc(sizeof *ovr);
@@ -292,37 +281,27 @@ ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 	glGenTextures(1, &ovr->placeholder);
 	DefaultTexture(ovr->placeholder, 2, 2);
 	
-	// Sensor stuff
-	// ovr->sensor_mgr = ASensorManager_getInstance();
-	// ALooper *looper = ALooper_forThread();
-	// ovr->gyro_event_queue = ASensorManager_createEventQueue(ovr->sensor_mgr, looper, ALOOPER_POLL_CALLBACK, GyroCallback, NULL);
-	// ASensor *gyroscope = ASensorManager_getDefaultSensor(ovr->sensor_mgr, ASENSOR_TYPE_GYROSCOPE);
-	// ASensorEventQueue_enableSensor(ovr->gyro_event_queue, gyroscope);
-	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_EnterVrMode(%p)", parms);
 	return ovr;
 }
 
-// void ProcessGryoscopeEvents(ovrMobile *ovr) {
-// 	ssize_t events = 1;
-// 	
-// 	while (events >= 0) {
-// 		ASensorEvent evt;
-// 		events = ASensorEventQueue_getEvents(ovr->gyro_event_queue, &evt, 1);
-// 		
-// 		if (events < 0) {
-// 			return;
-// 		}
-// 		
-// 		ovr->gyro_raw.x = evt.values[0];
-// 		ovr->gyro_raw.y = evt.values[1];
-// 		ovr->gyro_raw.z = evt.values[2];
-// 	}
-// }
-
 void vrapi_LeaveVrMode(ovrMobile* ovr) {
-	// todo
+	EGLint err;
+	
+#ifdef BLIT_WITH_SHADER
+	glDeleteProgram(ovr->blit_program);
+#endif
 	glDeleteTextures(1, &ovr->placeholder);
+	
+	// If we didn't get passed an EGL context directly we're responsible for
+	// managing it, so we need to destroy it upon leaving VR mode.
+	if (ovr->params.Flags & VRAPI_MODE_FLAG_NATIVE_WINDOW) {
+		eglDestroySurface(ovr->egl_display, ovr->egl_surface);
+		
+		if ((err = eglGetError()) != EGL_SUCCESS) {
+			FATAL("eglDestroySurface failed: 0x%x", err);
+		}
+	}
 	
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_LeaveVrMode(%p)", ovr);
 	free(ovr);
