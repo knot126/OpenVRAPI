@@ -345,6 +345,7 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 			break;
 			
 #ifndef SINGLE_EYE
+#ifdef NATIVE_RES
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH:
 			result = 1024; // todo tho the docs say they always return this
 			break;
@@ -352,6 +353,15 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT:
 			result = 1024;
 			break;
+#else // NATIVE_RES
+		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH:
+			result = gWidth/2; // todo tho the docs say they always return this
+			break;
+			
+		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT:
+			result = gHeight;
+			break;
+#endif // NATIVE_RES
 #else
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH:
 			result = gWidth/2; // todo tho the docs say they always return this
@@ -557,6 +567,10 @@ ovrQuatf EulerToQuat(ovrVector3f rot) {
 	return quat;
 }
 
+float WFromXYZForUnitQuaternion(float x, float y, float z) {
+	return sqrtf(1.0f - x * x - y * y - z * z);
+}
+
 ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds) {
 	// todo
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedTracking2(%p, %f) -> [struct]", ovr, absTimeInSeconds);
@@ -566,7 +580,7 @@ ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds
 	ovrTracking2 tracking;
 	tracking.Status = VRAPI_TRACKING_STATUS_ORIENTATION_TRACKED | VRAPI_TRACKING_STATUS_ORIENTATION_VALID;
 #ifdef USE_GRV
-	tracking.HeadPose.Pose.Orientation = (ovrQuatf) {ort.x, ort.y, ort.z, 1.0};
+	tracking.HeadPose.Pose.Orientation = (ovrQuatf) {-ort.y, ort.x, ort.z, WFromXYZForUnitQuaternion(ort.x, ort.y, ort.z)};
 #else
 	tracking.HeadPose.Pose.Orientation = EulerToQuat(ort);
 #endif

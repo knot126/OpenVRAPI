@@ -1,4 +1,4 @@
-// #define USE_GRV 1
+#define USE_GRV 1
 #define POLLING_RATE_MICROSECONDS 10000
 
 typedef struct {
