@@ -3,8 +3,14 @@
 
 typedef struct {
 	ASensorEventQueue *queue;
+#ifndef USE_GRV
 	ovrVector3f orientation;
 	uint64_t lastEventTime;
+#else
+	ovrQuatf orientation;
+	ovrQuatf basis;
+	bool initialised;
+#endif
 } Gyroscope;
 
 int GyroCallback(int fd, int events, void *this_) {
@@ -22,9 +28,22 @@ int GyroCallback(int fd, int events, void *this_) {
 		}
 		
 #ifdef USE_GRV
-		this->orientation.x = event.data[0];
-		this->orientation.y = event.data[1];
-		this->orientation.z = event.data[2];
+		this->orientation.x = 1.4 * -event.data[1];
+		this->orientation.y = 1.4 * event.data[0];
+		// this->orientation.z = event.data[2];
+		this->orientation.z = 0.0f;
+		// this->orientation.w = event.data[3];
+		this->orientation.w = sqrt(1.0f - this->orientation.x * this->orientation.x - this->orientation.y * this->orientation.y - this->orientation.z * this->orientation.z);
+		
+		if (!this->initialised) {
+			this->basis = this->orientation;
+			this->initialised = true;
+		}
+		
+		this->orientation.x -= this->basis.x;
+		this->orientation.y -= this->basis.y;
+		this->orientation.z -= this->basis.z;
+		this->orientation.w = sqrt(1.0f - this->orientation.x * this->orientation.x - this->orientation.y * this->orientation.y - this->orientation.z * this->orientation.z);
 #else
 		// First event should be used as a reference frame for all others
 		if (this->lastEventTime == 0) {
@@ -49,8 +68,13 @@ int GyroCallback(int fd, int events, void *this_) {
 }
 
 void GyroInit(Gyroscope *this) {
+#ifdef USE_GRV
+	this->orientation = (ovrQuatf) {0.0, 0.0, 0.0, 1.0};
+	this->initialised = false;
+#else
 	this->lastEventTime = 0;
 	this->orientation = (ovrVector3f) {0.0, 0.0, 0.0};
+#endif
 	
 	ALooper *looper = ALooper_forThread();
 	
@@ -86,7 +110,11 @@ void GyroInit(Gyroscope *this) {
 	ASensorEventQueue_setEventRate(this->queue, sensor, POLLING_RATE_MICROSECONDS);
 }
 
+#ifdef USE_GRV
+ovrQuatf GyroGet(Gyroscope *this) {
+#else
 ovrVector3f GyroGet(Gyroscope *this) {
+#endif
 	return this->orientation;
 }
 

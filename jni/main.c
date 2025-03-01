@@ -28,7 +28,8 @@
 #include "sensorstuff.c"
 
 #define BLIT_WITH_SHADER 1
-#define SINGLE_EYE 1
+// #define SINGLE_EYE 1
+#define NATIVE_RES 1
 
 typedef struct ovrMobile {
 	ovrModeParms params;
@@ -355,7 +356,7 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 			break;
 #else // NATIVE_RES
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH:
-			result = gWidth/2; // todo tho the docs say they always return this
+			result = gWidth/2;
 			break;
 			
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT:
@@ -364,7 +365,7 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 #endif // NATIVE_RES
 #else
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH:
-			result = gWidth/2; // todo tho the docs say they always return this
+			result = gWidth/2;
 			break;
 			
 		case VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT:
@@ -575,14 +576,12 @@ ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds
 	// todo
 	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedTracking2(%p, %f) -> [struct]", ovr, absTimeInSeconds);
 	
-	ovrVector3f ort = GyroGet(&gGyro);
-	
 	ovrTracking2 tracking;
 	tracking.Status = VRAPI_TRACKING_STATUS_ORIENTATION_TRACKED | VRAPI_TRACKING_STATUS_ORIENTATION_VALID;
 #ifdef USE_GRV
-	tracking.HeadPose.Pose.Orientation = (ovrQuatf) {-ort.y, ort.x, ort.z, WFromXYZForUnitQuaternion(ort.x, ort.y, ort.z)};
+	tracking.HeadPose.Pose.Orientation = GyroGet(&gGyro);
 #else
-	tracking.HeadPose.Pose.Orientation = EulerToQuat(ort);
+	tracking.HeadPose.Pose.Orientation = EulerToQuat(GyroGet(&gGyro));
 #endif
 	tracking.HeadPose.Pose.Position = (ovrVector3f) {0.0, 0.0, 0.0};
 	tracking.HeadPose.AngularVelocity = (ovrVector3f) {0.0, 0.0, 0.0};
