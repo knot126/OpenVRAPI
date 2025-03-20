@@ -59,13 +59,13 @@ Gyroscope gGyro;
 ovrInitializeStatus vrapi_Initialize(const ovrInitParms * initParms) {
 	// todo
 	GyroInit(&gGyro);
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Initialize(%p) -> %d", initParms, VRAPI_INITIALIZE_SUCCESS);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Initialize(%p) -> %d", initParms, VRAPI_INITIALIZE_SUCCESS);
 	return VRAPI_INITIALIZE_SUCCESS;
 }
 
 void vrapi_Shutdown() {
 	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Shutdown()");
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Shutdown()");
 }
 
 #ifdef BLIT_WITH_SHADER
@@ -283,7 +283,7 @@ ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 	glGenTextures(1, &ovr->placeholder);
 	DefaultTexture(ovr->placeholder, 2, 2);
 	
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_EnterVrMode(%p)", parms);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_EnterVrMode(%p)", parms);
 	return ovr;
 }
 
@@ -305,19 +305,19 @@ void vrapi_LeaveVrMode(ovrMobile* ovr) {
 		}
 	}
 	
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_LeaveVrMode(%p)", ovr);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_LeaveVrMode(%p)", ovr);
 	free(ovr);
 }
 
 bool vrapi_ShowSystemUI(const ovrJava *java, const ovrSystemUIType type) {
 	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_ShowSystemUI(%p, %d) -> false", java, type);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_ShowSystemUI(%p, %d) -> false", java, type);
 	return false;
 }
 
 void vrapi_SetPropertyInt(const ovrJava* java, const ovrProperty propType, const int intVal) {
 	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetPropertyInt(%p, %d, %d)", java, propType, intVal);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetPropertyInt(%p, %d, %d)", java, propType, intVal);
 }
 
 int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty propType) {
@@ -385,7 +385,7 @@ int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty prop
 			break;
 	}
 	
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetSystemPropertyInt(%p, %d) -> %d", java, propType, result);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetSystemPropertyInt(%p, %d) -> %d", java, propType, result);
 	
 	return result;
 }
@@ -403,7 +403,7 @@ float vrapi_GetSystemPropertyFloat(const ovrJava* java, const ovrSystemProperty 
 			break;
 	}
 	
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetSystemPropertyFloat(%p, %d) -> %f", java, propType, result);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetSystemPropertyFloat(%p, %d) -> %f", java, propType, result);
 	
 	return result;
 }
@@ -412,7 +412,7 @@ double vrapi_GetTimeInSeconds() {
 	struct timespec ts;
 	clock_gettime(CLOCK_REALTIME, &ts);
 	double result = (double)ts.tv_sec + 1e-9 * ts.tv_nsec;
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTimeInSeconds() -> %f", result);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTimeInSeconds() -> %f", result);
 	return result;
 }
 
@@ -436,13 +436,13 @@ ovrTextureSwapChain* vrapi_CreateTextureSwapChain(ovrTextureType type, ovrTextur
 		DefaultTexture(chain->textures[i], width, height);
 	}
 	
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_CreateTextureSwapChain(type=%d, format=%d, width=%d, height=%d, levels=%d, buffered=%s) -> %p", type, format, width, height, levels, buffered ? "true" : "false", chain);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_CreateTextureSwapChain(type=%d, format=%d, width=%d, height=%d, levels=%d, buffered=%s) -> %p", type, format, width, height, levels, buffered ? "true" : "false", chain);
 	return chain;
 }
 
 void vrapi_DestroyTextureSwapChain(ovrTextureSwapChain* chain) {
 	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_DestroyTextureSwapChain(%p)", chain);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_DestroyTextureSwapChain(%p)", chain);
 	
 	glDeleteTextures(chain->texture_count, chain->textures);
 	free(chain);
@@ -450,13 +450,13 @@ void vrapi_DestroyTextureSwapChain(ovrTextureSwapChain* chain) {
 
 int vrapi_GetTextureSwapChainLength(ovrTextureSwapChain* chain) {
 	int count = chain->texture_count;
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainLength(%p) -> %d", chain, count);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainLength(%p) -> %d", chain, count);
 	return count;
 }
 
 unsigned int vrapi_GetTextureSwapChainHandle(ovrTextureSwapChain* chain, int index) {
 	int handle = chain->textures[index % chain->texture_count];
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainHandle(%p, %d) -> %d", chain, index, handle);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetTextureSwapChainHandle(%p, %d) -> %d", chain, index, handle);
 	return handle;
 }
 
@@ -510,7 +510,7 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 	
 	glViewport(0, 0, w, h);
 	
-	glClearColor(0.5, 0.5, 0.5, 1.0);
+	glClearColor(0.0, 0.0, 0.0, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 	
 	// Draw each layer
@@ -553,7 +553,7 @@ ovrResult vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* f
 		abort();
 	}
 	
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SubmitFrame2(%p, %p) -> %d", ovr, frameDescription, ovrSuccess);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SubmitFrame2(%p, %p) -> %d", ovr, frameDescription, ovrSuccess);
 	return ovrSuccess;
 }
 
@@ -574,7 +574,7 @@ float WFromXYZForUnitQuaternion(float x, float y, float z) {
 
 ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds) {
 	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedTracking2(%p, %f) -> [struct]", ovr, absTimeInSeconds);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedTracking2(%p, %f) -> [struct]", ovr, absTimeInSeconds);
 	
 	ovrTracking2 tracking;
 	tracking.Status = VRAPI_TRACKING_STATUS_ORIENTATION_TRACKED | VRAPI_TRACKING_STATUS_ORIENTATION_VALID;
@@ -616,19 +616,19 @@ double vrapi_GetPredictedDisplayTime(ovrMobile* ovr, long long frameIndex) {
 	// todo
 	double res = vrapi_GetTimeInSeconds() + (1.0/60.0/2.0) * frameIndex;
 	
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedDisplayTime(%p, %lld) -> %f", ovr, frameIndex, res);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_GetPredictedDisplayTime(%p, %lld) -> %f", ovr, frameIndex, res);
 	
 	return res;
 }
 
 ovrResult vrapi_SetPerfThread(ovrMobile* ovr, const ovrPerfThreadType type, const uint32_t threadId) {
 	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetPerfThread(%p, %d, %u) -> %d", ovr, type, threadId, ovrSuccess);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetPerfThread(%p, %d, %u) -> %d", ovr, type, threadId, ovrSuccess);
 	return ovrSuccess;
 }
 
 ovrResult vrapi_SetClockLevels(ovrMobile* ovr, const int32_t cpuLevel, const int32_t gpuLevel) {
 	// todo
-	__android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetClockLevels(%p, %d, %d) -> %d", ovr, cpuLevel, gpuLevel, ovrSuccess);
+	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetClockLevels(%p, %d, %d) -> %d", ovr, cpuLevel, gpuLevel, ovrSuccess);
 	return ovrSuccess;
 }
