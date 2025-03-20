@@ -28,8 +28,8 @@ int GyroCallback(int fd, int events, void *this_) {
 		}
 		
 #ifdef USE_GRV
-		this->orientation.x = 1.4 * -event.data[1];
-		this->orientation.y = 1.4 * event.data[0];
+		this->orientation.x = -event.data[1];
+		this->orientation.y = event.data[0];
 		// this->orientation.z = event.data[2];
 		this->orientation.z = 0.0f;
 		// this->orientation.w = event.data[3];
