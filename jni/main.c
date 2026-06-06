@@ -27,9 +27,9 @@
 
 #include "sensorstuff.c"
 
-#define BLIT_WITH_SHADER 1
+// #define BLIT_WITH_SHADER 1
 // #define SINGLE_EYE 1
-#define NATIVE_RES 1
+// #define NATIVE_RES 1
 
 typedef struct ovrMobile {
 	ovrModeParms params;
@@ -205,21 +205,53 @@ static void DrawEyeFromTextureAndLRBT(GLuint prog, GLuint tex, float l, float r,
 	// Draw
 	glDrawArrays(GL_TRIANGLES, 0, 6); GL_QCHK();
 }
+#else
+static void DrawEyeFromTextureFast(GLuint textureId, size_t eyeNumber) {
+	const int w = gWidth, h = gHeight;
+	
+	if (glIsTexture(textureId) != GL_TRUE) {
+		FATAL("OpenGL validation error: %d does not name a texture", textureId);
+		return;
+	}
+	
+	// generate framebuffer to blit
+	GLuint framebufferStatus;
+	GLuint textureFramebuffer;
+	
+	glGenFramebuffers(1, &textureFramebuffer);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, textureFramebuffer);
+	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
+	
+	if ((framebufferStatus = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER)) != GL_FRAMEBUFFER_COMPLETE) {
+		FATAL("OpenGL validation error: framebuffer %d is incomplete (0x%04X)", textureFramebuffer, framebufferStatus);
+		return;
+	}
+	
+	// bind default to draw framebuffer so that we can blit to it
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	
+	// blit
+	glBlitFramebuffer(0, 0, w/2, h, eyeNumber*(w/2), 0, (eyeNumber+1)*(w/2), h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	
+	// destroy.
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &textureFramebuffer);
+}
 #endif
 
 void DefaultTexture(GLuint texId, int width, int height) {
 	GLenum e;
-	char *pixels = malloc(4 * width * height);
+	// char *pixels = malloc(4 * width * height);
 	
 	glActiveTexture(GL_TEXTURE0); GL_CHECK("glActiveTexture");
 	glBindTexture(GL_TEXTURE_2D, texId); GL_CHECK("glBindTexture");
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels); GL_CHECK("glTexImage2D");
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL); GL_CHECK("glTexImage2D");
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	
-	free(pixels);
+	// free(pixels);
 }
 
 ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
@@ -320,9 +352,22 @@ void vrapi_SetPropertyInt(const ovrJava* java, const ovrProperty propType, const
 	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_SetPropertyInt(%p, %d, %d)", java, propType, intVal);
 }
 
+static void openvrapi_update_surface_size(void) {
+	EGLDisplay display = eglGetCurrentDisplay();
+	EGLSurface surface = eglGetCurrentSurface(EGL_DRAW);
+	
+	if (display != EGL_NO_DISPLAY && surface != EGL_NO_SURFACE) {
+		eglQuerySurface(display, surface, EGL_WIDTH, &gWidth);
+		eglQuerySurface(display, surface, EGL_HEIGHT, &gHeight);
+	}
+}
+
 int vrapi_GetSystemPropertyInt(const ovrJava* java, const ovrSystemProperty propType) {
 	// todo
 	int result = 0;
+	
+	// HACK
+	// openvrapi_update_surface_size();
 	
 	switch (propType) {
 		case VRAPI_SYS_PROP_DEVICE_TYPE:
@@ -470,7 +515,11 @@ ovrResult vrapi_SubmitFrame2_Layer_Projection2(ovrMobile *ovr, const ovrSubmitFr
 		if ((size_t)chain > 4096) {
 			GLint tex = vrapi_GetTextureSwapChainHandle(chain, layer->Textures[i].SwapChainIndex);
 			
+#ifdef BLIT_WITH_SHADER
 			DrawEyeFromTextureAndLRBT(ovr->blit_program, tex, -1.0 + i, (float)i, -1.0, 1.0);
+#else
+			DrawEyeFromTextureFast(tex, i);
+#endif
 		}
 		else {
 			LOG(ANDROID_LOG_WARN, "ColorSwapChain = %p !! WTF!?", chain);

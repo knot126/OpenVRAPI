@@ -1,5 +1,6 @@
 // #define USE_GRV 1
-#define POLLING_RATE_MICROSECONDS 10000
+#define POLLING_RATE_MICROSECONDS 8333
+#define NON_GRV_MULTIPLIER 1.0
 
 typedef struct {
 	ASensorEventQueue *queue;
@@ -28,22 +29,22 @@ int GyroCallback(int fd, int events, void *this_) {
 		}
 		
 #ifdef USE_GRV
-		this->orientation.x = -event.data[1];
+		this->orientation.x = event.data[1];
 		this->orientation.y = event.data[0];
-		// this->orientation.z = event.data[2];
-		this->orientation.z = 0.0f;
-		// this->orientation.w = event.data[3];
-		this->orientation.w = sqrt(1.0f - this->orientation.x * this->orientation.x - this->orientation.y * this->orientation.y - this->orientation.z * this->orientation.z);
+		this->orientation.z = event.data[2];
+		// this->orientation.z = 0.0f;
+		this->orientation.w = event.data[3];
+		// this->orientation.w = sqrt(1.0f - this->orientation.x * this->orientation.x - this->orientation.y * this->orientation.y - this->orientation.z * this->orientation.z);
 		
 		if (!this->initialised) {
 			this->basis = this->orientation;
 			this->initialised = true;
 		}
 		
-		this->orientation.x -= this->basis.x;
-		this->orientation.y -= this->basis.y;
-		this->orientation.z -= this->basis.z;
-		this->orientation.w = sqrt(1.0f - this->orientation.x * this->orientation.x - this->orientation.y * this->orientation.y - this->orientation.z * this->orientation.z);
+		// this->orientation.x -= this->basis.x;
+		// this->orientation.y -= this->basis.y;
+		// this->orientation.z -= this->basis.z;
+		// this->orientation.w = sqrt(1.0f - this->orientation.x * this->orientation.x - this->orientation.y * this->orientation.y - this->orientation.z * this->orientation.z);
 #else
 		// First event should be used as a reference frame for all others
 		if (this->lastEventTime == 0) {
@@ -55,9 +56,9 @@ int GyroCallback(int fd, int events, void *this_) {
 		float delta = ((float) (event.timestamp - this->lastEventTime)) / 1e9;
 		
 		// Shitty integration :3
-		this->orientation.x -= 1.3 * delta * event.data[1];
-		this->orientation.y += 1.3 * delta * event.data[0];
-		// this->orientation.z += delta * event.data[2];
+		this->orientation.x -= NON_GRV_MULTIPLIER * delta * event.data[1];
+		this->orientation.y += NON_GRV_MULTIPLIER * delta * event.data[0];
+		// this->orientation.z += NON_GRV_MULTIPLIER * delta * event.data[2];
 		
 		// Set this as the timestamp for the last event
 		this->lastEventTime = event.timestamp;
