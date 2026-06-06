@@ -13,6 +13,7 @@
 #include <android/log.h>
 #include <android/looper.h>
 #include <android/sensor.h>
+#include <android/native_window_jni.h>
 
 #include <time.h>
 #include <stdlib.h>
@@ -36,6 +37,7 @@ typedef struct ovrMobile {
 	EGLContext egl_context;
 	EGLDisplay egl_display;
 	EGLSurface egl_surface;
+	ANativeWindow *window;
 	
 #ifdef BLIT_WITH_SHADER
 	GLuint blit_program;
@@ -59,6 +61,31 @@ Gyroscope gGyro;
 ovrInitializeStatus vrapi_Initialize(const ovrInitParms * initParms) {
 	// todo
 	GyroInit(&gGyro);
+	
+	// Get surface height and width early
+	JNIEnv *env = initParms->Java.Env;
+	
+	// windowManager = nativeActivity.getWindowManager()
+	jclass clsActivity = (*env)->FindClass(env, "android/app/Activity");
+	jmethodID mthGetWindowManager = (*env)->GetMethodID(env, clsActivity, "getWindowManager", "()Landroid/view/WindowManager;");
+	jobject objWindowManager = (*env)->CallObjectMethod(env, initParms->Java.ActivityObject, mthGetWindowManager);
+	
+	// display = windowManager.getDefaultDisplay()
+	jclass clsWindowManager = (*env)->FindClass(env, "android/view/WindowManager");
+	jmethodID mthGetDefaultDisplay = (*env)->GetMethodID(env, clsWindowManager, "getDefaultDisplay", "()Landroid/view/Display;");
+	jobject objDisplay = (*env)->CallObjectMethod(env, objWindowManager, mthGetDefaultDisplay);
+	
+	// display.getWidth(), display.getHeight()
+	jclass clsDisplay = (*env)->FindClass(env, "android/view/Display");
+	jmethodID mthGetWidth = (*env)->GetMethodID(env, clsDisplay, "getWidth", "()I");
+	jmethodID mthGetHeight = (*env)->GetMethodID(env, clsDisplay, "getHeight", "()I");
+	gWidth = (*env)->CallIntMethod(env, objDisplay, mthGetWidth);
+	gHeight = (*env)->CallIntMethod(env, objDisplay, mthGetHeight);
+	
+	if ((*env)->ExceptionCheck(env)) {
+		FATAL("Exception pending after trying to get display metrics", NULL);
+	}
+	
 	// __android_log_print(ANDROID_LOG_INFO, "OpenVRAPI", "vrapi_Initialize(%p) -> %d", initParms, VRAPI_INITIALIZE_SUCCESS);
 	return VRAPI_INITIALIZE_SUCCESS;
 }
@@ -305,8 +332,8 @@ ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms) {
 	}
 	
 	// Get the width and height (sorry these are global :/)
-	eglQuerySurface(ovr->egl_display, ovr->egl_surface, EGL_WIDTH, &gWidth);
-	eglQuerySurface(ovr->egl_display, ovr->egl_surface, EGL_HEIGHT, &gHeight);
+	// eglQuerySurface(ovr->egl_display, ovr->egl_surface, EGL_WIDTH, &gWidth);
+	// eglQuerySurface(ovr->egl_display, ovr->egl_surface, EGL_HEIGHT, &gHeight);
 	
 #ifdef BLIT_WITH_SHADER
 	ovr->blit_program = LoadProgram(shaderSource);
